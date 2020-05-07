@@ -1,0 +1,136 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Amadou Barry"
+date: "5/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+        
+## Data
+The training data for this project are available here: [https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv]
+
+The test data are available here: [https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv]
+
+The data for this project come from this source: [http://groupware.les.inf.puc-rio.br/har]. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+ ## Project Goal
+        The goal of your project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-). You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details.
+
+## Approach
+Our outcome variable is 'classe',  which is a factor variable that describe how well the candidates perfomed. For this data set, participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions: - exactly according to the specification (Class A) - throwing the elbows to the front (Class B) - lifting the dumbbell only halfway (Class C) - lowering the dumbbell only halfway (Class D) - throwing the hips to the front (Class E).
+
+Two models will be tested using decision tree and random forest. The model with the highest accuracy with the cross validation technique will be chosen as our final model, also the expected out-of sample error will be determined.
+
+## Reading the training and testing data set 
+```{r}
+
+# Reading the data and replacing all the missing data with NA
+train <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+dim(train); dim(test)
+```
+## Preprocessing the data 
+ Let's remove some obvious useless variables.
+ These variables are: "X", "user_name", "raw_timestamp_part_1" "raw_timestamp_part_2" "cvtd_timestamp" and "new_window"
+```{r}
+#Removing some variables from the training and testing set 
+train <- subset(train, select = -c(1:7))   #1:6 correspond to those first 6 variables 
+test <- subset(test, select = -c(1:7))  
+# deleting the last test colum "problem_id"
+test <- subset(test, select = -c(problem_id))
+# Cheking the dimensions
+dim(train); dim(test)
+
+```
+### Deleting colums with NA's values
+```{r}
+train <- train[,colSums(is.na(train))==0]
+test <- test[,colSums(is.na(test))==0]
+ dim(train); dim(test)
+```
+ Now we have only 53 colomns for our training set and 52 for our testing.
+ 
+# Plot of the train data according to the "classe" variable 
+```{r}
+plot(train$classe, col="blue", ylab= "Density", main="Distribution of the variable classe")
+```
+## Libraries
+```{r message = FALSE, warning=FALSE}
+set.seed(1234)
+library(caret)
+library(lattice)
+library(ggplot2)
+library(dplyr)
+library(rpart)
+library(randomForest)
+library(rattle)
+```
+
+## Partition of the data set into subTrain and subTest to allow cross validation later on
+```{r}
+inTrain <- createDataPartition(y=train$classe, p=0.95, list = FALSE)
+subTrain <- train[inTrain,]
+subTest <- train[-inTrain,]
+```
+ 
+# Models 
+## Training model using random forest
+```{r cache=TRUE}
+rf_mod <- randomForest(classe ~., data= subTrain)
+rf_mod 
+plot(rf_mod)
+```
+
+### Confusion matrix for random forest 
+```{r}
+# Prediction using random Forest model
+rf_pre <- predict(rf_mod, newdata = subTest)
+# confusion matrix 
+rf_confMX <- confusionMatrix(rf_pre, subTest$classe)
+rf_confMX
+```
+        Our random forest model has 99.6% accuracy which is pretty good.
+        
+## Training model using Decision Trees
+```{r cache=TRUE}
+dt_mod <- rpart(classe~., data = subTrain, method ="class") # method= "class" cause y is a factor
+# fancyplot of the model
+
+fancyRpartPlot(dt_mod)
+```
+
+### Confusion matrix for Decision Trees
+
+```{r}
+# prediction for the decision trees model
+dt_pre <- predict(dt_mod, newdata= subTest, type="class")
+# Confusion Matrix
+dt_confMX <- confusionMatrix(dt_pre, subTest$classe)
+dt_confMX
+```
+        The Decision Trees model has 71% accuracy on the test data.
+
+# Decision 
+With 99.6% accuracy our random forest model prediction is way better than than the Decision Trees model which is only about 71%. So obviously we choosing the random forest model to predict the "classe" of our test data from the begining. The expected out-of-sample error is estimated at 0.004, or 0.4%. The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. 
+
+# Prediction of the random forest model on the test dataset
+```{r}
+test_pred <- predict(rf_mod, test)
+test_pred
+```
+
+
+
+
+
+
+
